@@ -1,0 +1,4 @@
+# dsh bundle patch: inserts the skin-background plugin into a profile's layer stack.
+- insert:
+    - id: skin-background
+      name: 'dsh-skin-background'
