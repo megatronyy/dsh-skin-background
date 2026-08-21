@@ -6,7 +6,7 @@
 
 ---
 
-Adds `twfx7758/dsh-skin-background`, a theme/skin plugin for the dsh web client.
+Adds `megatronyy/dsh-skin-background`, a theme/skin plugin for the dsh web client.
 
 ## What it does
 
@@ -18,7 +18,7 @@ Adds `twfx7758/dsh-skin-background`, a theme/skin plugin for the dsh web client.
 ## Install
 
 ```
-dsh plugin --profile web add github:twfx7758/dsh-skin-background
+dsh plugin --profile web add github:megatronyy/dsh-skin-background
 ```
 
 (or `dsh plugin --profile web add dsh-skin-background` from npm once published, preferred)

@@ -13,6 +13,14 @@
     "theme",
     "wallpaper"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/megatronyy/dsh-skin-background.git"
+  },
+  "homepage": "https://github.com/megatronyy/dsh-skin-background#readme",
+  "bugs": {
+    "url": "https://github.com/megatronyy/dsh-skin-background/issues"
+  },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
