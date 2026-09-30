@@ -1,34 +1,44 @@
 /**
- * dsh-skin-background, Host half. Owns two things: the `skin-background`
- * settings namespace (enabled / image / dim / blur, durable through the
- * user-settings document) and the `/skin-background` wallpaper routes that
- * list and serve the shipped wallpapers plus the user's drop-in directory.
- * The browser half in `src/client` consumes both.
+ * dsh-skin-background, Host half. Owns the `skin-background` loader entry:
+ * the Schemastery `Config` below is what the settings domain projects into
+ * the browser (the entry id doubles as the settings namespace), and the
+ * `/skin-background` routes list and serve the shipped wallpapers plus the
+ * user's drop-in directory. The browser half in `src/client` consumes both.
+ *
+ * dsh >= 0.1.7-rc.2: user edits land in the profile patch layer keyed by this
+ * entry's id — there is no separate settings document to register. The entry
+ * declares `auto: false` so the domain does not generate a generic page next
+ * to the plugin's own "Skin" settings section.
  */
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import {
-  BLUR_MAX, DIM_MAX, SKIN_NAMESPACE, WALLPAPER_ROUTE,
-  isAcceptableImage, type SkinSettings,
+  BLUR_MAX, WALLPAPER_ROUTE,
+  type SkinSettings,
 } from './skin-settings.ts'
 import { listWallpapers, readWallpaper, type WallpaperListing } from './wallpapers.ts'
-
-/** Settings namespace this plugin owns (join key for the browser card). */
-export const NS = settingsNamespace(SKIN_NAMESPACE)
+import { handleUpload, handleWallpaperDelete } from './upload.ts'
 
 /** Composition-layer configuration for the `skin-background` loader row. */
 export interface Config extends SkinSettings {}
 
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(true),
-  image: z.string().default(''),
-  dim: z.number().min(0).max(DIM_MAX).step(0.05).default(0.15),
-  blur: z.number().min(0).max(BLUR_MAX).step(1).default(0),
+// Every field is `.volatile()`: in dsh >= 0.1.7-rc.2 only volatile fields are
+// projected into the settings forms (SettingsForms.describe / volatileForm)
+// and only volatile paths accept form writes. Without it the namespace is
+// never served and every save is refused with "Config field ... is not
+// volatile". Through the loader each volatile field reaches `apply` as a live
+// `Volatile<T>` reference (read with `.get()`); the host half stores nothing,
+// so it never reads them.
+export const Config = z.object({
+  enabled: z.boolean().default(true).volatile(),
+  image: z.string().default('').volatile(),
+  transparency: z.number().min(0).max(1).step(0.05).default(0.85).volatile(),
+  blur: z.number().min(0).max(BLUR_MAX).step(1).default(0).volatile(),
+  windowTransparency: z.number().min(0).max(1).step(0.05).default(0).volatile(),
 })
 
 /** The webServer service surface this plugin touches (structural: declared by the web profile). */
@@ -46,26 +56,24 @@ const BUILTIN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'assets'
 /** User drop-in wallpaper directory; DSH_HOME is honored when set. */
 const USER_DIR = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skin-center', 'wallpapers')
 
+/** The settings-domain surface this plugin touches (structural: declared by dsh-base). */
+interface SettingsFormsService {
+  configure(presentation: { auto?: boolean }, owner?: unknown): () => void
+}
+
 /**
- * Plugin entry: register the settings section and the wallpaper routes.
+ * Plugin entry: keep the auto-generated settings page off (the plugin ships
+ * its own "Skin" section) and register the wallpaper routes.
  * @param ctx - host cordis context.
- * @param config - composition-layer entry (partial; schema defaults fill the gaps).
+ * @param config - composition-layer entry; visuals are applied by the browser
+ *   half from the settings projection, so the host half only stores the values.
  */
 export function apply(ctx: Context, config: Partial<Config> = {}): void {
-  // Schemastery normalizes a partial entry through its defaults at call time.
-  const entry = Config(config as Config)
-  installSettingsSection(ctx, NS, Config, entry, {
-    // Constraint the schema cannot express: refuse writes that would store
-    // an image reference the browser half would refuse to apply.
-    validate: (value: Config) => {
-      if (value.image !== undefined && !isAcceptableImage(value.image)) {
-        throw new Error('image must be empty, "preset:<id>", an http(s) URL, or a skin-background wallpaper path')
-      }
-    },
-    // Nothing on the Host side derives from these fields; the browser half
-    // reacts through its settings-scope subscription.
-    setSource: () => {},
-    onChange: () => {},
+  void config
+  // Suppress the schema-derived page for this entry; the entry id still serves
+  // the namespace to `configForms` readers (see SettingsForms.describe).
+  ctx.inject(['settings'], (child) => {
+    child.effect(() => (child as Context & { settings: SettingsFormsService }).settings.configure({ auto: false }, ctx.fiber))
   })
 
   ctx.inject(['webServer'], (wctx) => {
@@ -77,17 +85,25 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
   })
 }
 
-/** Serve `GET /skin-background/wallpapers[/<file>]`; everything else is a 404. */
+/** Serve `GET /skin-background/wallpapers[/<file>]` and `POST /skin-background/upload`. */
 async function handleSkinRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const send = (status: number, body: string, contentType: string, cacheControl = 'no-store'): void => {
     res.writeHead(status, { 'content-type': contentType, 'cache-control': cacheControl })
     res.end(body)
   }
+  const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
+  if (req.method === 'POST' && pathname === '/skin-background/upload') {
+    await handleUpload(req, res, USER_DIR)
+    return
+  }
+  if (req.method === 'DELETE' && pathname.startsWith(`${WALLPAPER_ROUTE}/`)) {
+    await handleWallpaperDelete(req, res, USER_DIR)
+    return
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     send(405, JSON.stringify({ error: 'method not allowed' }), 'application/json')
     return
   }
-  const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
   if (pathname === WALLPAPER_ROUTE) {
     const listing: WallpaperListing = { wallpapers: await listWallpapers(BUILTIN_DIR, USER_DIR) }
     send(200, JSON.stringify(listing), 'application/json')

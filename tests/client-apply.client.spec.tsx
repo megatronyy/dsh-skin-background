@@ -5,7 +5,8 @@ import type { SkinScopeController, SkinScopeSnapshot } from '../src/client/SkinS
 
 /**
  * Wiring test for the client entry: dictionaries, the default skin, the
- * scoped settings subscription, and the settings-section registration.
+ * config-form subscription, the settings-section registration, and the
+ * Plugins-page bundle configuration slot.
  */
 interface RegisteredSection {
   options: Record<string, unknown>
@@ -24,7 +25,7 @@ interface FakeClientContext {
     register(options: Record<string, unknown>, component: () => unknown): unknown
   }
   theme: { overrideTokens(source: string, tokens: Record<string, { light: string; dark: string }>): () => void }
-  settingsScope?: { bind(spec: { namespace: string }): SkinScopeController }
+  configForms?: { get(namespace: string): SkinScopeController }
 }
 
 function mountClient(documents: Record<string, unknown>): {
@@ -40,9 +41,9 @@ function mountClient(documents: Record<string, unknown>): {
   const base: FakeClientContext = {
     effect(callback) { const dispose = callback(); return void dispose },
     inject(services, callback) {
-      if (!services.includes('settingsScope')) return
+      if (!services.includes('configForms')) return
       const scoped: FakeClientContext = Object.create(base)
-      scoped.settingsScope = { bind: () => scope }
+      scoped.configForms = { get: (namespace: string) => namespace === 'skin-background' ? scope : undefined as never }
       scoped.slots = {
         inject: (name, register) => { registrations.push({ name }); register() },
         register: (options, component) => {
@@ -70,7 +71,7 @@ class FakeScope implements SkinScopeController {
   private snapshot: SkinScopeSnapshot
 
   constructor(documents: Record<string, unknown>) {
-    this.snapshot = { value: documents as never, user: {}, revision: 1 }
+    this.snapshot = { status: 'ready', value: documents as never, user: {}, revision: 1 }
   }
 
   getSnapshot(): SkinScopeSnapshot {
@@ -82,12 +83,17 @@ class FakeScope implements SkinScopeController {
     return () => { this.listeners.delete(listener) }
   }
 
-  async set(): Promise<void> {}
-  async unset(): Promise<void> {}
+  async set(): Promise<boolean> { return true }
+  async unset(): Promise<boolean> { return true }
 
   /** Change the durable document and notify subscribers. */
   publish(documents: Record<string, unknown>): void {
-    this.snapshot = { value: documents as never, user: {}, revision: this.snapshot.revision + 1 }
+    this.snapshot = {
+      status: 'ready',
+      value: documents as never,
+      user: {},
+      revision: (this.snapshot.revision ?? 0) + 1,
+    }
     for (const listener of this.listeners) listener()
   }
 }
@@ -95,7 +101,7 @@ class FakeScope implements SkinScopeController {
 describe('client apply', () => {
   it('registers dictionaries, applies defaults, subscribes to the scope, and registers the section', async () => {
     const { apply } = await import('../src/client/index.ts')
-    const harness = mountClient({ enabled: true, image: '', dim: 0.35, blur: 0 })
+    const harness = mountClient({ enabled: true, image: '', transparency: 0.35, blur: 0 })
     apply(harness.ctx as never)
 
     // Default skin is on with the shipped fallback wallpaper.
@@ -112,7 +118,24 @@ describe('client apply', () => {
     expect(label()).toBe('dsh-skin:nav')
 
     // A settings change re-applies the skin live.
-    harness.scope.publish({ enabled: false, image: '', dim: 0.35, blur: 0 })
+    harness.scope.publish({ enabled: false, image: '', transparency: 0.35, blur: 0 })
     expect(document.body.classList.contains(SKIN_ACTIVE_CLASS)).toBe(false)
+  })
+
+  it('registers the bundle configuration slot keyed by the package name', async () => {
+    const { apply } = await import('../src/client/index.ts')
+    const { PLUGIN_PACKAGE_NAME } = await import('../src/skin-settings.ts')
+    const harness = mountClient({ enabled: true, image: '', transparency: 0.35, blur: 0 })
+    apply(harness.ctx as never)
+
+    const bundleConfig = harness.sections.find(entry => entry.options.name === 'plugins.bundle.config')
+    expect(bundleConfig).toBeDefined()
+    expect(bundleConfig?.options.key).toBe(PLUGIN_PACKAGE_NAME)
+    expect(PLUGIN_PACKAGE_NAME).toBe('dsh-skin-background')
+
+    // view 'page' renders the full skin form; 'summary' a one-line placeholder.
+    const component = bundleConfig?.component as (props: { view?: string }) => { type: unknown }
+    expect(typeof component({ view: 'page' }).type).toBe('function')
+    expect(component({ view: 'summary' }).type).toBe('span')
   })
 })

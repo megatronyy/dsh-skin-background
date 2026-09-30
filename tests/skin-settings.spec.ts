@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SKIN_SETTINGS, FALLBACK_WALLPAPER_URL, WALLPAPER_ROUTE,
-  clampBlur, clampDim, isAcceptableImage, resolveImageUrl, resolveSkinSettings,
+  clampBlur, clampTransparency, isAcceptableImage, resolveImageUrl, resolveSkinSettings,
   type WallpaperEntry,
 } from '../src/skin-settings.ts'
 
@@ -35,17 +35,18 @@ describe('isAcceptableImage', () => {
 })
 
 describe('clamps', () => {
-  it('clamps dim into [0, DIM_MAX] and maps garbage to the default', () => {
-    expect(clampDim(-1)).toBe(0)
-    expect(clampDim(2)).toBe(0.9)
-    expect(clampDim(0.42)).toBe(0.42)
-    expect(clampDim('x' as unknown)).toBe(DEFAULT_SKIN_SETTINGS.dim)
-    expect(clampDim(undefined)).toBe(DEFAULT_SKIN_SETTINGS.dim)
+  it('clamps transparency values into [0, 1] and maps garbage to the default', () => {
+    expect(clampTransparency(-1, 0)).toBe(0)
+    expect(clampTransparency(2, 0)).toBe(1)
+    expect(clampTransparency(0.42, 0)).toBe(0.42)
+    expect(clampTransparency('x' as unknown, DEFAULT_SKIN_SETTINGS.transparency)).toBe(DEFAULT_SKIN_SETTINGS.transparency)
+    expect(clampTransparency(undefined, DEFAULT_SKIN_SETTINGS.transparency)).toBe(DEFAULT_SKIN_SETTINGS.transparency)
+    expect(clampTransparency('x' as unknown, 0)).toBe(0)
   })
 
   it('clamps blur into [0, BLUR_MAX] whole pixels', () => {
     expect(clampBlur(-5)).toBe(0)
-    expect(clampBlur(99)).toBe(24)
+    expect(clampBlur(99)).toBe(60)
     expect(clampBlur(7.6)).toBe(8)
     expect(clampBlur(null)).toBe(DEFAULT_SKIN_SETTINGS.blur)
   })
@@ -59,10 +60,18 @@ describe('resolveSkinSettings', () => {
   })
 
   it('keeps valid values and repairs invalid ones', () => {
-    expect(resolveSkinSettings({ enabled: false, image: 'preset:x', dim: 0.5, blur: 3 }))
-      .toEqual({ enabled: false, image: 'preset:x', dim: 0.5, blur: 3 })
-    expect(resolveSkinSettings({ enabled: 'yes' as unknown, image: 'javascript:x', dim: 5, blur: -2 }))
-      .toEqual({ enabled: false, image: '', dim: 0.9, blur: 0 })
+    expect(resolveSkinSettings({ enabled: false, image: 'preset:x', transparency: 0.5, blur: 3, windowTransparency: 0.4 }))
+      .toEqual({ enabled: false, image: 'preset:x', transparency: 0.5, blur: 3, windowTransparency: 0.4 })
+    expect(resolveSkinSettings({ enabled: 'yes' as unknown, image: 'javascript:x', transparency: 5, blur: -2 }))
+      .toEqual({ enabled: false, image: '', transparency: 1, blur: 0, windowTransparency: 0 })
+  })
+
+  it('defaults windowTransparency to opaque and clamps garbage to the default', () => {
+    expect(resolveSkinSettings({}).windowTransparency).toBe(0)
+    expect(resolveSkinSettings({ windowTransparency: 0.6 }).windowTransparency).toBe(0.6)
+    expect(resolveSkinSettings({ windowTransparency: 'yes' as unknown }).windowTransparency)
+      .toBe(DEFAULT_SKIN_SETTINGS.windowTransparency)
+    expect(resolveSkinSettings({ windowTransparency: 9 }).windowTransparency).toBe(1)
   })
 })
 

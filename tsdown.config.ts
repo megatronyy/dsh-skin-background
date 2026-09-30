@@ -18,7 +18,6 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-runtime/client',
 ]
 
 export default defineConfig([
@@ -34,7 +33,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
-      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-settings', '@deepseek-ai/schemastery'],
+      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery'],
     },
   },
   {

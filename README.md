@@ -9,9 +9,9 @@ DeepSeek Harness (dsh) 皮肤插件：给 Web 界面加上可切换的图片背�
 ![dusk drift wallpaper](docs/screenshots/dusk-drift.png)
 
 - 内置 4 张原创渐变壁纸（aurora-dawn / dusk-drift / ocean-mist / midnight-bloom），也支持用户目录 `~/.dsh/skin-center/wallpapers` 中放入自己的图片，或输入任意 http(s) 图片链接
-- 皮肤面板出现在「设置 → 皮肤」：启用开关、壁纸选择、自定义链接、背景压暗（0–90%）与背景模糊（0–24px）滑杆，保存后即时生效
-- 深浅色自适应：面板变为半透明毛玻璃（通过 `ctx.theme.overrideTokens` 叠加 token 层），深色模式下加一层更深的暗纱保证文字对比度
-- 设置通过 dsh 的 user-settings 文档（`skin-background` 命名空间）持久化，带写入校验（拒绝 `javascript:` 等非法图片引用）
+- 皮肤面板出现在「设置 → 图片背景」：启用开关、壁纸选择（含本地上传与删除）、自定义链接、主面板透明度（0–100%，越高越透明）、设置页透明度（0–100%，设置与插件页共用）与背景模糊（0–60px）滑杆，保存后即时生效
+- 深浅色自适应：设置/插件窗口的透明度连续可调（通过 `ctx.theme.overrideTokens` 叠加 token 层），深色模式下加一层更深的暗纱保证文字对比度
+- 设置通过 profile patch 层（`skin-background` entry）持久化，带写入校验（拒绝 `javascript:` 等非法图片引用）
 
 ## 安装
 
